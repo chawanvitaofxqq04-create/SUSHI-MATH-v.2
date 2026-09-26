@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SUSHI MATH AR - เกมซูชิการคูณทะลุจอ</title>
+    <!-- MediaPipe AI Libraries สำหรับ AR -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <style>
+        :root {
+            --primary: #ef4444; 
+            --primary-dark: #b91c1c;
+            --secondary: #f97316; 
+            --success: #10b981;
+            --danger: #ef4444;
+            --wood-board: #8b4513; 
+            --text-dark: #1f2937;
+            --text-light: #fff;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Mali:wght@600;700&family=Prompt:wght@500;700&display=swap');
+
+        * {
+            box-sizing: border-box; margin: 0; padding: 0;
+            font-family: 'Mali', 'Prompt', sans-serif;
+            user-select: none; -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #fce7f3;
+            background-image: 
+                radial-gradient(circle, #fbcfe8 10%, transparent 10%),
+                radial-gradient(circle, #fbcfe8 10%, transparent 10%);
+            background-size: 40px 40px; background-position: 0 0, 20px 20px;
+            color: var(--text-dark); overflow: hidden; 
+            display: flex; flex-direction: column; align-items: center;
+            height: 100vh; width: 100vw;
+        }
+
+        #game-header {
+            width: 100%; background: linear-gradient(180deg, #ef4444, #dc2626);
+            color: var(--text-light); padding: 10px 15px; display: flex;
+            justify-content: space-between; align-items: center;
+            border-bottom: 6px solid var(--primary-dark); z-index: 10;
+            flex-wrap: wrap; gap: 5px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .header-section { display: flex; align-items: center; gap: 10px; }
+        .logo { font-size: 22px; font-weight: bold; text-shadow: 2px 2px 0px #7f1d1d;}
+        
+        .stat-box { 
+            background: rgba(255,255,255,0.25); padding: 6px 15px; 
+            border-radius: 20px; font-weight: bold; font-size: 18px; 
+            border: 2px solid rgba(255,255,255,0.5); text-shadow: 1px 1px 0px #000;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .stat-box.pop { transform: scale(1.3); background: #facc15; color: #b45309; border-color: #b45309; text-shadow: none; }
+        .hearts { color: #fca5a5; font-size: 20px; letter-spacing: 2px; text-shadow: 1px 1px 2px #000;}
+
+        #game-container {
+            position: relative; width: 100%; flex-grow: 1; display: flex;
+            flex-direction: column; align-items: center; justify-content: center;
+            padding: 10px; height: calc(100vh - 70px); 
+        }
+
+        #question-box {
+            background: #ffffff; border: 6px solid var(--text-dark);
+            border-radius: 20px; padding: 15px 50px; font-size: 50px;
+            font-weight: bold; color: var(--text-dark); box-shadow: 0 8px 0 var(--text-dark);
+            margin-bottom: 20px; text-align: center; z-index: 5;
+            transition: all 0.2s ease; font-family: 'Prompt', sans-serif;
+            min-width: 300px;
+        }
+        #question-box.correct-anim { background: var(--success); color: white; transform: scale(1.1); border-color: #047857; box-shadow: 0 8px 0 #047857;}
+        #question-box.wrong-anim { background: var(--danger); color: white; transform: scale(0.9) translateX(-15px); border-color: #991b1b; box-shadow: 0 8px 0 #991b1b;}
+
+        #canvas-wrapper {
+            position: relative; width: 100%; max-width: 1000px;
+            flex-grow: 1; background: #e7c393; border-radius: 20px;
+            overflow: hidden; border: 8px solid var(--wood-board);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.4);
+        }
+
+        canvas { display: block; width: 100%; height: 100%; object-fit: cover; cursor: crosshair; }
+        #video-feed { display: none; } 
+
+        button {
+            border: none; padding: 10px 18px; font-size: 16px; font-weight: bold;
+            border-radius: 15px; cursor: pointer; transition: all 0.1s;
+            font-family: 'Mali', sans-serif; text-shadow: 1px 1px 0px rgba(0,0,0,0.3);
+        }
+        button:active { transform: translateY(5px); box-shadow: 0 0 0 transparent !important; }
+        
+        .btn-game { background: #cbd5e1; color: var(--text-dark); border: 3px solid #64748b; box-shadow: 0 5px 0 #64748b; text-shadow: none; }
+        .btn-game-red { background: #ef4444; color: white; border: 3px solid #991b1b; box-shadow: 0 5px 0 #991b1b; }
+        .btn-ar { background: #8b5cf6; color: white; border: 3px solid #5b21b6; box-shadow: 0 5px 0 #5b21b6; }
+        .btn-primary { background: var(--secondary); color: white; border: 3px solid #b45309; box-shadow: 0 5px 0 #b45309; }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 100;
+        }
+        .cute-modal {
+            background: #ffffff; border: 6px solid #fb923c; padding: 30px 25px; 
+            border-radius: 25px; text-align: center; max-width: 450px; width: 92%;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3); position: relative;
+        }
+        .cute-modal h1 { font-size: 32px; color: #ef4444; margin-bottom: 5px; text-shadow: 2px 2px 0px #fca5a5; display: flex; align-items: center; justify-content: center; gap: 10px;}
+        
+        input[type="text"] { 
+            width: 100%; padding: 12px; font-size: 18px; border-radius: 15px; text-align: center; 
+            border: 2px solid #e5e7eb; background: #f9fafb; color: var(--text-dark); outline: none; font-weight: bold; margin-bottom: 15px;
+        }
+
+        .diff-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;}
+        .diff-card { background: white; border: 2px solid #e5e7eb; border-radius: 15px; padding: 12px 5px; cursor: pointer; transition: all 0.2s; text-align: center; }
+        .diff-card:active { transform: scale(0.95); }
+        .diff-card .label { font-size: 14px; font-weight: bold; color: #4b5563;}
+        .diff-card.active { border-color: #fb923c; background: #ffedd5; box-shadow: 0 4px 0 #fb923c; }
+        .diff-card.active .label { color: #ea580c; }
+
+        .btn-large { width: 100%; background: #10b981; color: white; font-size: 20px; padding: 12px; border: none; border-radius: 20px; margin-bottom: 10px; box-shadow: 0 6px 0 #047857; font-family: 'Prompt';}
+        .hidden { display: none !important; }
+
+        .floating-text-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 20; }
+        .float-text { position: absolute; font-weight: bold; font-size: 40px; color: #fbbf24; text-shadow: 3px 3px 0 #92400e, -1px -1px 0 #fff; animation: floatUp 1s forwards ease-out; font-family: 'Prompt';}
+        .float-text.wrong { color: #f87171; text-shadow: 3px 3px 0 #7f1d1d, -1px -1px 0 #fff; }
+        @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-80px) scale(1.5); opacity: 0; } }
+
+        #ar-loading { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 50; font-size: 24px; border-radius: 12px;}
+    </style>
+</head>
+<body>
+    <header id="game-header">
+        <div class="header-section">
+            <div class="logo">🍣 <span>SUSHI MATH</span></div>
+            <button id="btn-ar" class="btn-ar" onclick="toggleAR()">📷 เปิดโหมด AR</button>
+        </div>
+        <div class="header-section">
+            <div class="stat-box" id="score-box">คะแนน: <span id="ui-score">0</span></div>
+            <div class="stat-box">เลเวล: <span id="ui-level">1</span></div>
+            <div class="stat-box">เวลา: <span id="ui-timer">60</span>s</div>
+            <div class="hearts" id="ui-hearts">❤️❤️❤️</div>
+        </div>
+        <div class="header-section">
+            <button id="btn-stop" class="btn-game-red hidden" onclick="endGame()">⏹️ จบเกม</button>
+        </div>
+    </header>
+
+    <div id="game-container">
+        <div id="question-box">เตรียมตัวสนุก!</div>
+        <div id="canvas-wrapper">
+            <canvas id="gameCanvas" width="900" height="600"></canvas>
+            <div class="floating-text-container" id="float-container"></div>
+            <div id="ar-loading" class="hidden">
+                <div>กำลังเปิดระบบ AR อัจฉริยะ... ⏳</div>
+                <div style="font-size: 16px; margin-top: 10px; color: #fde047;">(อาจใช้เวลาโหลด AI 5-10 วินาทีในครั้งแรก)</div>
+            </div>
+        </div>
+    </div>
+    
+    <video id="video-feed" autoplay playsinline></video>
+
+    <div id="start-modal" class="modal-overlay">
+        <div class="cute-modal">
+            <h1>🌸 SUSHI MATH 🌸</h1>
+            <h2 style="font-size: 16px; margin-bottom: 20px; color: #4b5563;">เกมซูชิการคูณคาวาอี้</h2>
+            <input type="text" id="player-name" value="ฟ้าใส" placeholder="กรอกชื่อผู้เล่น...">
+            
+            <div style="text-align: left; font-weight: bold; font-size: 14px; margin-bottom: 5px; color: #374151;">เลือกระดับความยาก:</div>
+            <div class="diff-grid">
+                <div class="diff-card" id="btn-easy" onclick="setDifficulty('easy', this)"><div class="label">ง่าย<br>(บวก/ลบ)</div></div>
+                <div class="diff-card active" id="btn-medium" onclick="setDifficulty('medium', this)"><div class="label">ปานกลาง<br>(คูณ 2-12)</div></div>
+                <div class="diff-card" id="btn-hard" onclick="setDifficulty('hard', this)"><div class="label">ยาก<br>(คูณ/หาร)</div></div>
+            </div>
+            
+            <button class="btn-large" onclick="startGame()">เริ่มจับซูชิ! 🍣</button>
+            <button class="btn-game" style="width: 100%; border-radius: 20px; font-size: 16px; padding: 12px;" onclick="document.getElementById('rules-modal').classList.remove('hidden')">กติกาการเล่น 📖</button>
+        </div>
+    </div>
+
+    <div id="rules-modal" class="modal-overlay hidden">
+        <div class="cute-modal" style="text-align: left;">
+            <h3 style="color: #b45309; text-align: center; font-size: 24px; margin-bottom: 15px;">📖 กติกาการเล่น</h3>
+            <ul style="margin-left: 20px; font-size: 16px; line-height: 1.6; color: #374151;">
+                <li>ดูโจทย์ด้านบน แล้วหาซูชิคำตอบที่ถูกต้อง!</li>
+                <li><b>โหมดปกติ:</b> ใช้เมาส์คลิก หรือ เอานิ้วจิ้มซูชิบนจอ</li>
+                <li><b>โหมด AR สุดล้ำ:</b> <br>
+                    - คีบซูชิ: ชูมือขึ้นมาแล้ว <b>จีบนิ้วโป้งกับนิ้วชี้</b> 🤏<br>
+                    - งับซูชิ: ยื่นหน้าไปใกล้ๆ แล้ว <b>อ้าปากกว้างๆ</b> 👄
+                </li>
+                <li>ตอบถูก <b>+10 คะแนน และ +3 วินาที</b> ⭐</li>
+                <li>ตอบผิด <b>-5 คะแนน และเสียหัวใจ 1 ดวง</b> 💔</li>
+            </ul>
+            <button class="btn-game" style="width: 100%; margin-top: 20px;" onclick="document.getElementById('rules-modal').classList.add('hidden')">เข้าใจแล้ว ปิดหน้าต่าง</button>
+        </div>
+    </div>
+
+    <div id="game-over-modal" class="modal-overlay hidden">
+        <div class="cute-modal">
+            <h1>หมดเวลา!</h1>
+            <h2 style="font-size: 20px; color: #374151; margin-bottom: 15px;">เก่งมาก <span id="end-player" style="color: #ea580c;"></span>! 🎉</h2>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 15px; text-align: left; margin-bottom: 20px;">
+                <p style="margin: 5px 0;">คะแนนรวม: <b id="end-score" style="color: #ef4444; font-size: 24px; float: right;">0</b></p>
+                <p style="margin: 5px 0;">เลเวลที่ถึง: <b id="end-level" style="float: right;">1</b></p>
+            </div>
+            <button class="btn-primary" style="width: 100%; font-size: 20px; padding: 12px; border-radius: 20px;" onclick="showStartScreen()">🏠 กลับหน้าหลัก</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const GAME_WIDTH = 900; 
+        const GAME_HEIGHT = 600;
+        
+        let state = { 
+            isPlaying: false, score: 0, level: 1, time: 60, hearts: 3, 
+            playerName: "ฟ้าใส", difficulty: "medium", arMode: false
+        };
+        
+        let currentQuestion = null;
+        let sushis = [], particles = []; 
+        let gameLoopId, timerId, lastTime = 0;
+
+        let faceMesh, hands, camera;
+        const videoElement = document.getElementById('video-feed');
+        let arAimX = -100, arAimY = -100;
+        let isPinching = false;
+        let handDetected = false;
+        let lastARHitTime = 0; 
+        
+        const floatContainer = document.getElementById('float-container');
+        
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination); const now = audioCtx.currentTime;
+            if (type === 'correct') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(1400, now + 0.1);
+                gain.gain.setValueAtTime(0.4, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+                gain.gain.setValueAtTime(0.4, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2);
+            }
+        }
+
+        function generateMathQuestion() {
+            let num1, num2, answer, opSymbol; 
+            if (state.difficulty === 'easy') { 
+                num1 = Math.floor(Math.random() * 20) + 1; num2 = Math.floor(Math.random() * 20) + 1;
+                if(Math.random() > 0.5) { answer = num1 + num2; opSymbol = '+'; }
+                else { if(num1 < num2) [num1, num2] = [num2, num1]; answer = num1 - num2; opSymbol = '-'; }
+            } else if (state.difficulty === 'medium') { 
+                num1 = Math.floor(Math.random() * 11) + 2; num2 = Math.floor(Math.random() * 11) + 2;
+                answer = num1 * num2; opSymbol = '×';
+            } else { 
+                if(Math.random() > 0.5) {
+                    num1 = Math.floor(Math.random() * 20) + 2; num2 = Math.floor(Math.random() * 12) + 2;
+                    answer = num1 * num2; opSymbol = '×';
+                } else {
+                    num2 = Math.floor(Math.random() * 11) + 2; answer = Math.floor(Math.random() * 15) + 2; 
+                    num1 = answer * num2; opSymbol = '÷';
+                }
+            }
+
+            let options = new Set([answer]);
+            while (options.size < 3) {
+                let wrong = answer + (Math.floor(Math.random() * 15) - 7); 
+                if (wrong !== answer && wrong >= 0) options.add(wrong); 
+            }
+            return { text: `${num1} ${opSymbol} ${num2} = ?`, answer: answer, options: Array.from(options).sort(()=>Math.random()-0.5) };
+        }
+
+        const SUSHI_EMOJIS = ['🍣', '🍙', '🍤', '🍱', '🍘'];
+        class Sushi {
+            constructor(value, isCorrect, level, direction, startX) {
+                this.value = value; this.isCorrect = isCorrect; 
+                this.emoji = SUSHI_EMOJIS[Math.floor(Math.random() * SUSHI_EMOJIS.length)];
+                this.radius = 90; 
+                this.direction = direction; this.x = startX;
+                this.baseY = 360; this.y = this.baseY; 
+                this.speed = (1.5 + (level * 0.15)) * this.direction; 
+                this.wobbleOffset = Math.random() * Math.PI * 2; this.active = true;
+            }
+            update(dt) { 
+                this.x += this.speed * (dt * 60); this.y = this.baseY + Math.sin(Date.now()/150 + this.wobbleOffset)*6; 
+                if (this.direction === 1 && this.x > GAME_WIDTH + 200) this.active = false;
+                if (this.direction === -1 && this.x < -200) this.active = false;
+            }
+            draw(ctx) {
+                ctx.beginPath(); ctx.ellipse(this.x, this.y + 50, 85, 25, 0, 0, Math.PI * 2);
+                ctx.fillStyle = '#fef3c7'; ctx.fill(); ctx.strokeStyle = '#d97706'; ctx.lineWidth = 5; ctx.stroke();
+                
+                ctx.font = "110px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; 
+                ctx.fillText(this.emoji, this.x, this.y - 15);
+                
+                ctx.fillStyle = '#1f2937'; ctx.beginPath(); ctx.roundRect(this.x - 45, this.y - 100, 90, 50, 12); ctx.fill();
+                ctx.fillStyle = '#ffffff'; ctx.font = "bold 32px Prompt"; ctx.fillText(this.value, this.x, this.y - 72);
+            }
+            checkHit(x, y) { return Math.sqrt((this.x-x)**2 + (this.y-y)**2) < this.radius + 30; } 
+        }
+
+        class Particle {
+            constructor(x,y,c){this.x=x;this.y=y;this.vx=(Math.random()-0.5)*15;this.vy=(Math.random()-0.5)*15;this.life=1;this.c=c;this.s=Math.random()*15+8;}
+            update(dt){this.x+=this.vx*(dt*60);this.y+=this.vy*(dt*60);this.life-=0.03*(dt*60);}
+            draw(ctx){ ctx.globalAlpha=Math.max(0,this.life);ctx.fillStyle=this.c;ctx.beginPath(); ctx.arc(this.x,this.y,this.s,0,Math.PI*2); ctx.fill();ctx.globalAlpha=1; }
+        }
+
+        function spawnQuestion() {
+            currentQuestion = generateMathQuestion(); 
+            document.getElementById('question-box').textContent = currentQuestion.text; 
+            sushis = [];
+            let waveDirection = Math.random() > 0.5 ? 1 : -1; 
+            let spacing = 350; 
+            currentQuestion.options.forEach((opt, idx) => {
+                let startX = waveDirection === 1 ? -150 - (idx * spacing) : GAME_WIDTH + 150 + (idx * spacing);
+                sushis.push(new Sushi(opt, opt===currentQuestion.answer, state.level, waveDirection, startX));
+            });
+        }
+
+        function floatText(txt, type, x, y) {
+            const el = document.createElement('div'); el.className = `float-text ${type}`; el.textContent = txt;
+            const rect = canvas.getBoundingClientRect(); const scaleX = rect.width/GAME_WIDTH; const scaleY = rect.height/GAME_HEIGHT;
+            el.style.left = `${(x*scaleX)-30}px`; el.style.top = `${(y*scaleY)-30}px`;
+            floatContainer.appendChild(el); setTimeout(()=>el.remove(), 1000);
+        }
+
+        function hitSushi(s, correct) {
+            if(!s.active || !state.isPlaying) return;
+            s.active = false;
+            playSound(correct ? 'correct' : 'wrong');
+            for(let i=0;i<25;i++) particles.push(new Particle(s.x, s.y, correct?'#fde047':'#fca5a5')); 
+            
+            if(correct) {
+                state.score+=10; state.time+=3; 
+                document.getElementById('score-box').classList.add('pop'); setTimeout(() => document.getElementById('score-box').classList.remove('pop'), 200);
+                floatText('+10', 'correct', s.x, s.y - 50);
+                
+                document.getElementById('question-box').classList.add('correct-anim'); setTimeout(()=>document.getElementById('question-box').classList.remove('correct-anim'), 300);
+                
+                if(state.score % 50 === 0) { state.level++; floatText('LEVEL UP! 🌟','correct',GAME_WIDTH/2,150); }
+                sushis=[]; setTimeout(() => { if (state.isPlaying) spawnQuestion(); }, 500); 
+            } else {
+                floatText('-5', 'wrong', s.x, s.y - 50);
+                state.score=Math.max(0,state.score-5); state.hearts--;
+                document.getElementById('question-box').classList.add('wrong-anim'); setTimeout(()=>document.getElementById('question-box').classList.remove('wrong-anim'), 300);
+                if(state.hearts<=0) endGame(); 
+            }
+            updateUI();
+        }
+
+        function interact(x, y) {
+            if(!state.isPlaying) return;
+            const rect = canvas.getBoundingClientRect(); 
+            const cx = (x - rect.left) * (GAME_WIDTH / rect.width); 
+            const cy = (y - rect.top) * (GAME_HEIGHT / rect.height);
+            
+            particles.push(new Particle(cx, cy, '#cbd5e1'));
+
+            for(let i=sushis.length-1; i>=0; i--) {
+                if(sushis[i].active && sushis[i].checkHit(cx,cy)) { hitSushi(sushis[i], sushis[i].isCorrect); break; }
+            }
+        }
+
+        async function toggleAR() {
+            if (state.arMode) {
+                state.arMode = false;
+                document.getElementById('btn-ar').innerHTML = '📷 เปิดโหมด AR';
+                document.getElementById('btn-ar').style.background = '#8b5cf6';
+                if(camera) camera.stop();
+                videoElement.style.display = 'none';
+            } else {
+                document.getElementById('ar-loading').classList.remove('hidden');
+                
+                if(!hands) {
+                    hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+                    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+                    hands.onResults((results) => {
+                        handDetected = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
+                        if (handDetected) {
+                            const landmarks = results.multiHandLandmarks[0];
+                            const thumb = landmarks[4];
+                            const index = landmarks[8];
+                            
+                            let ix = (1 - index.x) * GAME_WIDTH;
+                            let iy = index.y * GAME_HEIGHT;
+                            let tx = (1 - thumb.x) * GAME_WIDTH;
+                            let ty = thumb.y * GAME_HEIGHT;
+
+                            arAimX = (ix + tx) / 2;
+                            arAimY = (iy + ty) / 2;
+
+                            let dist = Math.sqrt(Math.pow(ix-tx, 2) + Math.pow(iy-ty, 2));
+                            isPinching = dist < 45; 
+
+                            if (isPinching && Date.now() - lastARHitTime > 500) {
+                                for(let i=0; i<sushis.length; i++) {
+                                    if(sushis[i].active && sushis[i].checkHit(arAimX, arAimY)) { 
+                                        hitSushi(sushis[i], sushis[i].isCorrect); 
+                                        lastARHitTime = Date.now();
+                                        break; 
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                if(!faceMesh) {
+                    faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+                    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                    faceMesh.onResults((results) => {
+                        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                            const face = results.multiFaceLandmarks[0];
+                            const upperLip = face[13];
+                            const lowerLip = face[14];
+                            
+                            let mouthX = (1 - upperLip.x) * GAME_WIDTH;
+                            let mouthY = ((upperLip.y + lowerLip.y) / 2) * GAME_HEIGHT;
+                            
+                            let mouthDist = Math.abs(upperLip.y - lowerLip.y);
+                            let isMouthOpen = mouthDist > 0.05; 
+
+                            if (isMouthOpen && Date.now() - lastARHitTime > 500) {
+                                for(let i=0; i<sushis.length; i++) {
+                                    if(sushis[i].active && sushis[i].checkHit(mouthX, mouthY)) { 
+                                        hitSushi(sushis[i], sushis[i].isCorrect); 
+                                        lastARHitTime = Date.now();
+                                        break; 
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        if(state.arMode && state.isPlaying) {
+                            await hands.send({image: videoElement});
+                            await faceMesh.send({image: videoElement});
+                        }
+                    },
+                    width: 640, height: 480
+                });
+                
+                await camera.start();
+                
+                document.getElementById('ar-loading').classList.add('hidden');
+                state.arMode = true;
+                document.getElementById('btn-ar').innerHTML = '❌ ปิดกล้อง';
+                document.getElementById('btn-ar').style.background = '#ef4444';
+            }
+        }
+
+        function draw() {
+            // 1. วาด Background หรือ ภาพจากกล้อง
+            if(state.arMode) {
+                ctx.save();
+                ctx.translate(GAME_WIDTH, 0);
+                ctx.scale(-1, 1);
+                // ดักจับ error กรณีวีดีโอยังโหลดไม่เสร็จ
+                if(videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                    ctx.drawImage(videoElement, 0, 0, GAME_WIDTH, GAME_HEIGHT);
+                }
+                ctx.restore();
+            } else {
+                ctx.fillStyle='#fef3c7'; ctx.fillRect(0,0,GAME_WIDTH,GAME_HEIGHT); // สีครีมพาสเทล
+            }
+            
+            // 2. วาดสายพานแบบทึบเสมอ (เพื่อไม่ให้กลืนหายไปกับเสื้อผู้เล่น)
+            ctx.fillStyle='#374151'; ctx.fillRect(0, 400, GAME_WIDTH, 200); // พื้นสายพาน
+            ctx.fillStyle='#1f2937'; ctx.fillRect(0, 400, GAME_WIDTH, 15);  // ขอบสายพาน
+            
+            // เส้นบนสายพานวิ่ง
+            let off = (Date.now()/15)%80; 
+            for(let i=-80; i<GAME_WIDTH+80; i+=80) { 
+                ctx.fillStyle='#1f2937'; ctx.fillRect(i+off, 400, 4, 200); 
+            }
+            
+            // 3. วาดซูชิและเอฟเฟกต์
+            sushis.forEach(s=>s.draw(ctx)); 
+            particles.forEach(p=>p.draw(ctx));
+            
+            // 4. วาดเป้าเล็งมือ (ถ้าเปิดกล้อง)
+            if(state.arMode && handDetected) {
+                if(isPinching) {
+                    ctx.font = '60px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText('🥢', arAimX, arAimY);
+                } else {
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+                    ctx.beginPath(); ctx.arc(arAimX, arAimY, 10, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                }
+            }
+        }
+
+        function loop(ts) {
+            let dt = (ts-lastTime)/1000; if(dt>0.1) dt=0.1; lastTime = ts;
+            if(state.isPlaying) {
+                sushis.forEach(s=>s.update(dt)); sushis = sushis.filter(s=>s.active);
+                if(sushis.length === 0) spawnQuestion();
+                particles.forEach(p=>p.update(dt)); particles = particles.filter(p=>p.life>0);
+            }
+            draw(); 
+            gameLoopId = requestAnimationFrame(loop);
+        }
+
+        function updateUI() { 
+            document.getElementById('ui-score').textContent = state.score; 
+            document.getElementById('ui-level').textContent = state.level; 
+            document.getElementById('ui-timer').textContent = state.time; 
+            document.getElementById('ui-hearts').textContent = '❤️'.repeat(Math.max(0,state.hearts)) + '💔'.repeat(3-Math.max(0,state.hearts)); 
+        }
+
+        function setDifficulty(diff, btnElement) {
+            state.difficulty = diff;
+            document.querySelectorAll('.diff-card').forEach(c => c.classList.remove('active'));
+            btnElement.classList.add('active');
+        }
+
+        function startGame() {
+            initAudio(); 
+            let nameInput = document.getElementById('player-name').value;
+            state.playerName = nameInput.trim() !== '' ? nameInput : 'ฟ้าใส';
+            state.isPlaying = true; state.score = 0; state.level = 1; state.time = 60; state.hearts = 3;
+            
+            sushis = []; particles = []; updateUI();
+            
+            document.getElementById('start-modal').classList.add('hidden'); 
+            document.getElementById('game-over-modal').classList.add('hidden'); 
+            document.getElementById('btn-stop').classList.remove('hidden');
+            
+            spawnQuestion();
+            
+            if(timerId) clearInterval(timerId); 
+            timerId = setInterval(()=>{ 
+                state.time--; updateUI(); 
+                if(state.time <= 0) endGame(); 
+            }, 1000);
+            
+            lastTime = performance.now(); 
+            if(!gameLoopId) loop(lastTime);
+        }
+
+        function endGame() {
+            state.isPlaying = false; clearInterval(timerId);
+            document.getElementById('end-player').textContent = state.playerName; 
+            document.getElementById('end-score').textContent = state.score; 
+            document.getElementById('end-level').textContent = state.level; 
+            
+            document.getElementById('game-over-modal').classList.remove('hidden'); 
+            document.getElementById('btn-stop').classList.add('hidden');
+        }
+
+        function showStartScreen() {
+            document.getElementById('game-over-modal').classList.add('hidden');
+            document.getElementById('start-modal').classList.remove('hidden');
+            ctx.clearRect(0,0,GAME_WIDTH,GAME_HEIGHT); draw();
+        }
+
+        canvas.addEventListener('mousedown', e => interact(e.clientX, e.clientY));
+        canvas.addEventListener('touchstart', e => { e.preventDefault(); Array.from(e.touches).forEach(t=>interact(t.clientX, t.clientY)); }, {passive:false});
+        
+        window.onload = function() { draw(); }
+    </script>
+</body>
+</html>
